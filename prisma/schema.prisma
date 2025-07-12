@@ -1,0 +1,475 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String
+  name            String
+  avatar          String?
+  role            Role     @default(USER)
+  emailVerified   Boolean  @default(false)
+  emailVerifyToken String?
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  
+  // Subscription
+  subscriptionId  String?
+  subscriptionStatus SubscriptionStatus @default(FREE)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastLoginAt     DateTime?
+  
+  // Relations
+  stores          Store[]
+  payments        Payment[]
+  analytics       Analytics[]
+  
+  @@map("users")
+}
+
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  domain      String?
+  customDomain String?
+  
+  // Owner
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // AI Generated Configuration
+  industry    String
+  storeType   StoreType
+  description String?
+  targetAudience String?
+  
+  // Configuration
+  modules     Json     @default("{}")
+  settings    Json     @default("{}")
+  theme       Json     @default("{}")
+  
+  // SEO
+  metaTitle   String?
+  metaDescription String?
+  
+  // Status
+  status      StoreStatus @default(DRAFT)
+  isActive    Boolean  @default(false)
+  isDeployed  Boolean  @default(false)
+  deploymentUrl String?
+  
+  // Analytics
+  totalViews  Int      @default(0)
+  totalOrders Int      @default(0)
+  totalRevenue Decimal  @default(0)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  publishedAt DateTime?
+  
+  // Relations
+  products    Product[]
+  orders      Order[]
+  customers   Customer[]
+  analytics   Analytics[]
+  deployments Deployment[]
+  
+  @@map("stores")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  shortDescription String?
+  sku         String?
+  
+  // Pricing
+  price       Decimal
+  comparePrice Decimal?
+  costPrice   Decimal?
+  b2bPrice    Decimal?
+  
+  // Inventory
+  inventory   Int      @default(0)
+  trackInventory Boolean @default(true)
+  allowBackorder Boolean @default(false)
+  
+  // Product Details
+  weight      Decimal?
+  dimensions  Json?
+  category    String?
+  tags        String[]
+  images      Json     @default("[]")
+  
+  // SEO
+  metaTitle   String?
+  metaDescription String?
+  urlHandle   String?
+  
+  // Status
+  status      ProductStatus @default(DRAFT)
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  
+  // Store Relation
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  orderItems  OrderItem[]
+  variants    ProductVariant[]
+  
+  @@map("products")
+}
+
+model ProductVariant {
+  id          String   @id @default(cuid())
+  title       String
+  sku         String?
+  price       Decimal
+  comparePrice Decimal?
+  inventory   Int      @default(0)
+  weight      Decimal?
+  
+  // Variant Options
+  option1     String?  // e.g., "Size"
+  option2     String?  // e.g., "Color"
+  option3     String?  // e.g., "Material"
+  
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("product_variants")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  email       String
+  firstName   String
+  lastName    String
+  phone       String?
+  
+  // Customer Type
+  customerType CustomerType @default(B2C)
+  companyName String?
+  taxId       String?
+  
+  // Address
+  address     Json?
+  
+  // Marketing
+  acceptsMarketing Boolean @default(false)
+  
+  // Store Relation
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastOrderAt DateTime?
+  
+  // Relations
+  orders      Order[]
+  
+  @@unique([email, storeId])
+  @@map("customers")
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  orderNumber String   @unique
+  
+  // Pricing
+  subtotal    Decimal
+  tax         Decimal  @default(0)
+  shipping    Decimal  @default(0)
+  discount    Decimal  @default(0)
+  total       Decimal
+  
+  // Status
+  status      OrderStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+  fulfillmentStatus FulfillmentStatus @default(UNFULFILLED)
+  
+  // Customer Info
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  
+  // Addresses
+  billingAddress Json
+  shippingAddress Json?
+  
+  // Store Relation
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  
+  // Payment
+  paymentId   String?
+  paymentMethod String?
+  
+  // Notes
+  notes       String?
+  customerNotes String?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  processedAt DateTime?
+  fulfilledAt DateTime?
+  
+  // Relations
+  items       OrderItem[]
+  payments    Payment[]
+  
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  quantity    Int
+  price       Decimal
+  title       String
+  variant     String?
+  sku         String?
+  
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  
+  @@map("order_items")
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  amount      Decimal
+  currency    String   @default("usd")
+  status      PaymentStatus
+  method      String
+  
+  // External Payment IDs
+  stripePaymentId String?
+  stripeChargeId  String?
+  
+  // User/Order Relations
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  orderId     String?
+  order       Order?   @relation(fields: [orderId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("payments")
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  displayName String
+  description String
+  category    String
+  version     String   @default("1.0.0")
+  
+  // Configuration
+  config      Json     @default("{}")
+  dependencies String[]
+  
+  // Pricing
+  price       Decimal  @default(0)
+  billingType BillingType @default(FREE)
+  
+  // Status
+  isActive    Boolean  @default(true)
+  isPublic    Boolean  @default(true)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("modules")
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  category    String
+  industry    String?
+  
+  // Template Data
+  pages       Json
+  theme       Json
+  modules     Json
+  
+  // Media
+  thumbnail   String
+  screenshots Json     @default("[]")
+  
+  // Pricing
+  price       Decimal  @default(0)
+  isPremium   Boolean  @default(false)
+  
+  // Stats
+  usageCount  Int      @default(0)
+  rating      Decimal  @default(0)
+  
+  // Status
+  isActive    Boolean  @default(true)
+  isPublic    Boolean  @default(true)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("templates")
+}
+
+model Analytics {
+  id          String   @id @default(cuid())
+  
+  // Metrics
+  date        DateTime
+  views       Int      @default(0)
+  visitors    Int      @default(0)
+  orders      Int      @default(0)
+  revenue     Decimal  @default(0)
+  
+  // Conversion
+  conversionRate Decimal @default(0)
+  averageOrderValue Decimal @default(0)
+  
+  // Relations
+  storeId     String?
+  store       Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  @@unique([storeId, date])
+  @@map("analytics")
+}
+
+model Deployment {
+  id          String   @id @default(cuid())
+  version     String
+  status      DeploymentStatus
+  url         String?
+  buildLogs   String?
+  
+  // Configuration
+  config      Json
+  environment String   @default("production")
+  
+  // Store Relation
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deployedAt  DateTime?
+  
+  @@map("deployments")
+}
+
+// Enums
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum SubscriptionStatus {
+  FREE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+}
+
+enum StoreType {
+  B2C
+  B2B
+  MARKETPLACE
+  DIGITAL
+}
+
+enum StoreStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CustomerType {
+  B2C
+  B2B
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum FulfillmentStatus {
+  UNFULFILLED
+  PARTIALLY_FULFILLED
+  FULFILLED
+}
+
+enum BillingType {
+  FREE
+  ONE_TIME
+  MONTHLY
+  YEARLY
+}
+
+enum DeploymentStatus {
+  PENDING
+  BUILDING
+  SUCCESS
+  FAILED
+} 
